@@ -51,11 +51,11 @@ def create_callback(db):
         
         logger.info(f"Model generated: {model.total_token()}")
         
-        if not model.valid_response():
+        if model.valid_response():
+            s3.put_object(client.get_s3_output_key(), model.get_generation())
             db.update_materials_task((DONE,ZERO,ZERO, client.get_s3_output_key(), client.get_organization_id()))
             channel.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
         else:
-            s3.put_object(client.get_s3_output_key(), model.get_generation())
             db.update_materials_task((ERROR,prompts.get_token_length(), ZERO, client.get_s3_output_key(), client.get_organization_id()))
             channel.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
 
