@@ -4,74 +4,74 @@ import os
 import types
 import pytest
 from botocore.exceptions import ClientError
-
-# 👇 change this import to your actual module path
-import Models.AmazonModel as mod
+import Models.AmazonModel as main
 
 
-class FakeBody:
-    """Mimics botocore.response.StreamingBody.read() -> bytes."""
-    def __init__(self, payload_dict):
-        self._bytes = json.dumps(payload_dict).encode("utf-8")
+# ---------- Fakes / helpers ----------
+
+class _FakeBody:
+    """Mimic botocore StreamingBody with .read()->bytes."""
+    def __init__(self, payload: dict):
+        self._buf = json.dumps(payload).encode("utf-8")
     def read(self):
-        return self._bytes
+        return self._buf
 
 
-class FakeBedrockOK:
-    """Successful bedrock.invoke_model returning a dict with 'body' that supports .read()."""
-    def __init__(self, output_text="Hello world", usage=None):
+class _BedrockOK:
+    """Happy-path fake for bedrock.invoke_model."""
+    def __init__(self, output_text="Hello", usage=None):
         if usage is None:
-            usage = {"inputTokens": 7, "outputTokens": 3, "totalTokens": 10}
+            usage = {"inputTokens": 5, "outputTokens": 7, "totalTokens": 12}
         self.payload = {
             "results": [{"outputText": output_text}],
             "usage": usage
         }
     def invoke_model(self, modelId=None, body=None):
-        # Minimal validation of inputs
+        # basic sanity checks
         assert isinstance(modelId, str) and modelId
         assert isinstance(body, str) and body
-        return {"body": FakeBody(self.payload)}
+        return {"body": _FakeBody(self.payload)}
 
 
-class FakeBedrockMalformedBody:
-    """Returns a non-JSON body to exercise JSONDecodeError handling."""
+class _BedrockMalformedJSON:
+    """Returns invalid JSON body to trigger JSONDecodeError in _parse_response."""
     def invoke_model(self, modelId=None, body=None):
-        class BadBody:
-            def read(self):
-                return b'{"usage": {"inputTokens": 1}, "results": '  # truncated JSON
-        return {"body": BadBody()}
+        class _BadBody:
+            def read(self):  # truncated/invalid json
+                return b'{"usage":{"inputTokens":1},"results":[{"outputText":"x"}]'
+        return {"body": _BadBody()}
 
 
-class FakeBedrockRaisesClientError:
+class _BedrockRaisesClientError:
     def invoke_model(self, modelId=None, body=None):
         raise ClientError(
-            error_response={"Error": {"Code": "BadRequest", "Message": "boom"}},
+            error_response={"Error": {"Code": "BadRequest", "Message": "boom"}} ,
             operation_name="InvokeModel",
         )
 
 
-class FakeBedrockRaisesException:
+class _BedrockRaisesGeneric:
     def invoke_model(self, modelId=None, body=None):
         raise RuntimeError("unexpected failure")
 
 
 @pytest.fixture(autouse=True)
-def set_env(monkeypatch):
-    # Ensure MODEL_ID is set for all tests
+def _env(monkeypatch):
+    # Ensure MODEL_ID exists for all tests (your module reads it at import)
     monkeypatch.setenv("MODEL_ID", "anthropic.claude-3-haiku")
-    # If module read MODEL_ID at import, refresh its constant
-    mod.MODEL_ID = os.getenv("MODEL_ID")
+    main.MODEL_ID = os.getenv("MODEL_ID")
 
+
+# ---------- Tests ----------
 
 def test_success_flow(monkeypatch):
-    # Replace the global bedrock client in module with a fake OK client
-    monkeypatch.setattr(mod, "bedrock", FakeBedrockOK(output_text="Generated content", usage={
+    monkeypatch.setattr(main, "bedrock", _BedrockOK(output_text="Generated content", usage={
         "inputTokens": 11, "outputTokens": 29, "totalTokens": 40
     }))
 
-    m = mod.AmazonModel(prompt="Make stuff", temp=0.2, top_p=0.9, max_gen_len=128)
+    m = main.AmazonModel(prompt="Make stuff", temp=0.2, top_p=0.9, max_gen_len=128)
 
-    # Response parsed
+    # Parsed response present
     assert m.valid_response() is True
     assert m.get_generation() == "Generated content"
 
@@ -81,61 +81,57 @@ def test_success_flow(monkeypatch):
     assert m.total_token() == 40
 
 
-def test_malformed_body_parsing(monkeypatch, caplog):
-    monkeypatch.setattr(mod, "bedrock", FakeBedrockMalformedBody())
+def test_malformed_body(monkeypatch, caplog):
+    monkeypatch.setattr(main, "bedrock", _BedrockMalformedJSON())
+    m = main.AmazonModel(prompt="bad json", temp=0.1, top_p=0.5, max_gen_len=16)
 
-    m = mod.AmazonModel(prompt="test", temp=0.1, top_p=0.5, max_gen_len=16)
-    # _invoke_model returns a dict with body, but _parse_response should fail -> parsed_response None
+    # _parse_response should fail gracefully -> parsed_response None
     assert m.parsed_response is None
     assert m.valid_response() is False
-    # calling get_generation now would KeyError; we only assert invalid
-    # input/output/total token calls will also fail if used without a valid response — by design.
+
+    # Using token/generation methods without a valid response should raise
+    assert m._parse_response() is None
+    assert  m.input_token() is None
+    assert  m.output_token() is None
+    assert  m.total_token() is None
+    assert  m.get_generation() is None
 
 
-def test_client_error(monkeypatch, caplog):
-    monkeypatch.setattr(mod, "bedrock", FakeBedrockRaisesClientError())
 
-    m = mod.AmazonModel(prompt="boom", temp=0.5, top_p=0.9, max_gen_len=64)
-    # Invocation failed -> response is None, parsed_response None
+def test_client_error(monkeypatch):
+    monkeypatch.setattr(main, "bedrock", _BedrockRaisesClientError())
+
+    m = main.AmazonModel(prompt="boom", temp=0.5, top_p=0.9, max_gen_len=64)
+
     assert m.response is None
     assert m.parsed_response is None
     assert m.valid_response() is False
 
-    # Ensure the class doesn't crash when methods are not appropriate to call without response
-    with pytest.raises(AttributeError):
-        _ = m.input_token()
-    with pytest.raises(AttributeError):
-        _ = m.output_token()
-    with pytest.raises(AttributeError):
-        _ = m.total_token()
-    with pytest.raises(TypeError):
-        _ = m.get_generation()  # parsed_response is None -> TypeError/KeyError depending on access path
+    assert m._parse_response() is None
+    assert  m.input_token() is None
+    assert  m.output_token() is None
+    assert  m.total_token() is None
+    assert  m.get_generation() is None
 
 
 def test_generic_exception(monkeypatch):
-    monkeypatch.setattr(mod, "bedrock", FakeBedrockRaisesException())
+    monkeypatch.setattr(main, "bedrock", _BedrockRaisesGeneric())
 
-    m = mod.AmazonModel(prompt="x", temp=0.1, top_p=0.9, max_gen_len=8)
+    m = main.AmazonModel(prompt="x", temp=0.1, top_p=0.9, max_gen_len=8)
     assert m.response is None
     assert m.parsed_response is None
     assert m.valid_response() is False
 
 
-def test_usage_methods_independent_calls(monkeypatch):
-    """Validate that each token method re-parses body independently and returns correct fields."""
-    payload = {
-        "results": [{"outputText": "OK"}],
-        "usage": {"inputTokens": 2, "outputTokens": 5, "totalTokens": 7},
-    }
-    class FakeBedrockCustom:
-        def invoke_model(self, modelId=None, body=None):
-            return {"body": FakeBody(payload)}
+def test_usage_fields_present(monkeypatch):
+    """Validate that token helpers return correct values when usage dict is well-formed."""
+    payload_usage = {"inputTokens": 2, "outputTokens": 5, "totalTokens": 7}
+    monkeypatch.setattr(main, "bedrock", _BedrockOK(output_text="OK", usage=payload_usage))
 
-    monkeypatch.setattr(mod, "bedrock", FakeBedrockCustom())
-    m = mod.AmazonModel(prompt="p", temp=0.0, top_p=1.0, max_gen_len=4)
+    m = main.AmazonModel(prompt="p", temp=0.0, top_p=1.0, max_gen_len=4)
 
     assert m.valid_response() is True
+    assert m.get_generation() == "OK"
     assert m.input_token() == 2
     assert m.output_token() == 5
     assert m.total_token() == 7
-    assert m.get_generation() == "OK"

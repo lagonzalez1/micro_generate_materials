@@ -6,3 +6,4 @@ numpy
 pandas
 pika
 botocore
+google-genai
