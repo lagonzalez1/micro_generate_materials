@@ -46,8 +46,8 @@ def create_callback(db):
 
         questions_stringify = json.dumps(questions)
         prompts = Prompt(questions_stringify, assessment['title'], assessment['description'], assessment['max_score'], assessment['subject'], client.get_bias_type())
-        ## model = AmazonModel(prompts.get_prompt(),temp=0.7, top_p=0.9, max_gen_len=3000)
-        model = GeminiModel(prompts.get_prompt())
+        model = AmazonModel(prompts.get_prompt(),temp=0.7, top_p=0.9, max_gen_len=3000)
+        ## model = GeminiModel(prompts.get_prompt())
         
         logger.info(f"Model generated: {model.total_token()}")
         
@@ -56,7 +56,7 @@ def create_callback(db):
             channel.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
         else:
             s3.put_object(client.get_s3_output_key(), model.get_generation())
-            db.update_materials_task((ERROR,prompts.get_token_length(), 0, client.get_s3_output_key(), client.get_organization_id()))
+            db.update_materials_task((ERROR,prompts.get_token_length(), ZERO, client.get_s3_output_key(), client.get_organization_id()))
             channel.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
 
         
