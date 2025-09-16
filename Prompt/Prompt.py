@@ -1,4 +1,4 @@
-from Prompt.Prompts import get_identity, get_instructions, get_example
+from Prompt.Prompts import get_identity, get_instructions, get_example, get_restriction_output_start, get_restriction_output_end
 
 class Prompt:
     def __init__(self, questions: str, title: str, description: str, max_score: int, subject: str, bias_type: str):
@@ -16,6 +16,8 @@ class Prompt:
             get_identity()
             + get_instructions(self.title,self.subject ,self.description, self.questions, self.bias_type)
             + get_example()
+            + get_restriction_output_start()
+            + get_restriction_output_end()
         )
 
     def get_prompt(self) ->str:

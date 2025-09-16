@@ -47,7 +47,7 @@ def create_callback(db):
         questions_stringify = json.dumps(questions)
         prompts = Prompt(questions_stringify, assessment['title'], assessment['description'], assessment['max_score'], assessment['subject'], client.get_bias_type())
         model = AmazonModel(prompts.get_prompt(),temp=0.7, top_p=0.9, max_gen_len=3000)
-        ## model = GeminiModel(prompts.get_prompt())
+        ##model = GeminiModel(prompts.get_prompt())
         
         logger.info(f"Model generated: {model.total_token()}")
         

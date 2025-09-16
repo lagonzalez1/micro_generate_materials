@@ -7,3 +7,4 @@ pandas
 pika
 botocore
 google-genai
+pydantic

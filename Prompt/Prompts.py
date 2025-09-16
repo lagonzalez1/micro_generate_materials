@@ -15,10 +15,18 @@ def get_instructions(title, subject, description, questions, bias_type: str)->st
         Questions => {questions}
     """
 
+def get_restriction_output_start() ->str:
+    return f"The response string MUST start with: ```json"
+
+def get_restriction_output_end() ->str:
+    return f"The response string MUST end with: ```"
+
+
+
 def get_example()->str:
     return """
         Example response:
-        JSON:
+        ```json:
         {
             "guide_type": "study_guide | teacher_guide | session_guide",
             "subject": "Math | History | Biology | ...",
@@ -52,7 +60,5 @@ def get_example()->str:
             "summary": "string",
             "materials_needed": ["string"],
             "appendix": "string (optional)"
-        }
-        
-        
+        }```
     """
