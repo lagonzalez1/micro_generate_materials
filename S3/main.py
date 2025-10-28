@@ -23,7 +23,7 @@ class S3Instance:
             print(f"Uploading to s3 with key {key}")
             s3.put_object(
                 Bucket=self.bucket,
-                Key=str("materials/" + key),
+                Key=str(key),
                 Body=body,
                 ContentType='application/json'
             )

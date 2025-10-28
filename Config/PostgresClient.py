@@ -119,12 +119,36 @@ class PostgresClient:
         return [dict(row) for row in data]
 
 
+    ## import from ai_questions
     def update_materials_task(self, params):
         query = "UPDATE stu_tracker.Generate_materials_task SET status = %s, input_tokens = %s, output_tokens = %s WHERE s3_output_key = %s AND organization_id = %s"
         self.execute(query, params)
     
     def update_materials_task_retry(self, params):
         retry_query = "UPDATE stu_tracker.Generate_materials_task SET status = %s, retry_count = retry_count + 1 WHERE s3_output_key = %s;"
+        self.execute(retry_query, params)
+
+    def update_status(self, task_id, status):
+        query = """
+            UPDATE stu_tracker.Generate_question_task
+            SET status = %s WHERE id = %s;
+        """
+        self.execute(query, (status, task_id))
+
+    def get_district_data(self, params):
+        district_query = "SELECT name, city, state, region FROM stu_tracker.District WHERE organization_id = %s AND id = %s"
+        return self.fetch_one(district_query, params)
+    
+    def get_subject_data(self, params):
+        subject_query = "SELECT title, description FROM stu_tracker.Subjects WHERE organization_id = %s AND id = %s"
+        return self.fetch_one(subject_query, params)
+    
+    def update_question_task(self, params):
+        success_query = "UPDATE stu_tracker.Generate_questions_task SET status = %s, input_tokens = %s, output_tokens = %s WHERE s3_output_key = %s;"
+        self.execute(success_query, params)
+        
+    def update_question_task_retry(self, params):
+        retry_query = "UPDATE stu_tracker.Generate_questions_task SET status = %s, retry_count = retry_count + 1 WHERE s3_output_key = %s;"
         self.execute(retry_query, params)
                 
     def close(self):
