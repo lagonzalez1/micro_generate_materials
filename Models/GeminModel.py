@@ -4,6 +4,13 @@ import boto3
 from botocore.exceptions import BotoCoreError, ClientError
 from dotenv import load_dotenv
 from google import genai
+import logging
+
+logging.basicConfig(
+    level=logging.INFO, # Adjust to logging.DEBUG for more verbose logs
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
 load_dotenv()
 
@@ -20,17 +27,30 @@ class GeminiModel:
         self.response = self.generate_gemini()
         self.parsed_response = None
 
-
     def generate_gemini(self) -> dict:
         try:
             response = client.models.generate_content(
                 model="gemini-2.5-flash",
                 contents=self.prompt
             )
+            print(response)
             return response
         except (ClientError, Exception) as e:
             print(f"Error: Can't invoke. Reason: '{e}''")
     
+
+    def get_metadata(self)->dict:
+        try:
+            if self.response is None:
+                return None
+            input_tokens = self.input_token()
+            output_tokens = self.output_token()
+            return { "input_tokens": input_tokens, "output_tokens": output_tokens }
+        except (AttributeError, json.JSONDecodeError) as e:
+            logger.info("unable to get meta data: %s", e)
+            return None
+
+
     def valid_response(self)->bool:
         if self.response:
             return True

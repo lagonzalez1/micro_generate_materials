@@ -72,7 +72,7 @@ class AmazonModel:
         except (AttributeError, json.JSONDecodeError) as e:
             logger.error(f"output token error {e}")
             return None
-
+        
     def total_token(self):
         try:
             response_body = json.loads(self.response.get("body").read())

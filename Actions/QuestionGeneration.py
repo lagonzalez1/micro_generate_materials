@@ -19,7 +19,6 @@ ERROR = 'ERROR'
 s3 = S3Instance("tracker-client-storage")
 
 class QuestionGeneration:
-
     def __init__(self, db, channel, method, client: Client, model_type: str):
         self.db = db
         self.channel = channel
